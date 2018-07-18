@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginActivity extends StatelessWidget {
+
   final String cookie;
 
   final LanguageManager manager;
@@ -52,8 +53,8 @@ class LoginStateful extends StatefulWidget {
 
 /*MAIN CLASSS*/
 class _LoginState extends State<LoginStateful> {
+  ///Holds current scaffold state
   final key = new GlobalKey<ScaffoldState>();
-  String user = "";
 
   String cookie;
 
@@ -63,8 +64,7 @@ class _LoginState extends State<LoginStateful> {
 
   LanguageManager manager;
 
-  final TextEditingController descriptionController =
-  new TextEditingController();
+  final TextEditingController descriptionController = new TextEditingController();
 
   final TextEditingController commentController = new TextEditingController();
 
@@ -100,16 +100,13 @@ class _LoginState extends State<LoginStateful> {
           .add(new Duration(days: -day.weekday + 1 + i))
           .toIso8601String()
           .substring(0, 10));
-      print(day
-          .add(new Duration(days: -day.weekday + 1 + i))
-          .toIso8601String()
-          .substring(0, 10));
     }
 
     String dateFrom = day
         .add(new Duration(days: -day.weekday + 1))
         .toIso8601String()
         .substring(0, 10);
+
     String dateTo = day
         .add(new Duration(days: 5 - day.weekday))
         .toIso8601String()
@@ -123,7 +120,7 @@ class _LoginState extends State<LoginStateful> {
       setState(() {
         adProjects.add(new ListItem(
             added: true,
-            project: "Waiting for upload",
+            project: manager.getWords(36),
             unfinished: false,
             uploadAll: true));
       });
@@ -165,19 +162,22 @@ class _LoginState extends State<LoginStateful> {
             /*GET A WORK NAME FROM WORK ID AND BRANCH ID*/
             var id = data[i]['projectId'];
             var workId = data[i]['workTypeId'];
+
             var work;
+
             var response2 = await http.get(
                 'https://tmtest.artin.cz/data/projects/$id/work-types',
                 headers: {"cookie": cookie});
 
             List workData = json.decode(response2.body);
+            work = "";
 
-            print("LENGTH");
-            print(workData.length);
-
-            for (int j = 0; j < workData.length; j++) {
-              if (workData[j]['id'] == workId) {
+            if (workData != null && workData.length != 0) {
+              for (int j = 0; j < workData.length; j++) {
+                if (workData[j]['id'] == workId) {
                 work = workData[j]['name'];
+                print("founder" + work);
+                }
               }
             }
 
@@ -266,7 +266,6 @@ class _LoginState extends State<LoginStateful> {
               ],
             ),
           ),
-
           actions: <Widget>[
             new FlatButton(
               child: new Text(
@@ -516,7 +515,7 @@ class _LoginState extends State<LoginStateful> {
                       opacity: item.uploadAll == null ? 0.0 : 1.0,
                       child: new FlatButton(
                         child: new Text(
-                          "UPLOAD ALL",
+                          manager.getWords(35),
                           textScaleFactor: 1.0,
                           style: new TextStyle(
                               fontWeight: FontWeight.bold, color: Colors.blue),
@@ -570,7 +569,6 @@ class ListItem {
   });
 
   String getDate() {
-    print("TIMEFIRST " + time);
     String year = time.substring(0, 4);
     String month = time.substring(5, 7);
     String day = time.substring(8, 10);

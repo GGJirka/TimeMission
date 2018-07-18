@@ -25,7 +25,7 @@ class LanguageManager {
 
     new Language(englishText: "Czech", czechText: "Čeština"),
 
-    new Language(englishText: "Description", czechText: "Poznámka"),
+    new Language(englishText: "Description", czechText: "Popis práce"),
     new Language(englishText: "Cancel", czechText: "Zrušit"),
     new Language(englishText: "Add", czechText: "Přidat"),
     new Language(englishText: "Skip", czechText: "Přeskočit"),
@@ -57,17 +57,27 @@ class LanguageManager {
         czechText: "Aby se projevila změna, musíte aplikaci restarovat"),
     new Language(englishText: "Change user", czechText: "Změnit uživatele"),
     new Language(englishText: "Upload", czechText: "Nahrát"),
-    new Language(englishText: "Comment", czechText: "poznámka"),
+    new Language(englishText: "Comment", czechText: "Poznámka"),
+    new Language(englishText: "Waiting for upload",
+        czechText: "Záznamy připravené k odeslání"),
+    new Language(
+        englishText: "You have project waiting to upload. Would you like to continue anyway?",
+        czechText: "Máte neodeslané pracovní záznamy. Chcete i přesto pokračovat?"),
+    new Language(englishText: "UPLOAD ALL", czechText: "NAHRÁT VŠECHNY"),
+    new Language(
+        englishText: "Waiting for upload", czechText: "Připraveny k nahrání"),
+
+    new Language(englishText: "Work time must be longer than 10 min",
+        czechText: "Čas práce musí být delší jak 10min"),
   ];
 
-  LanguageManager({this.sharedPreferences});
-
-  void setLanguage() {
+  setLanguage() async {
+    sharedPreferences = await SharedPreferences.getInstance();
     isCzech = sharedPreferences.get("language") == "czech" ? true : false;
   }
 
   String getWords(int index) {
-    return sharedPreferences.get("language") == "czech"
+    return isCzech
         ? words[index].czechText
         : words[index].englishText;
   }

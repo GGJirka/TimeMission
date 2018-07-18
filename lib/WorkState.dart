@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_app/Language.dart';
@@ -11,11 +12,10 @@ import 'package:flutter_app/WorkRecords.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/*
-* TODO  Fix the time at :55
-*/
 class WorkActivity extends StatelessWidget {
+
   final String cookie;
+
   final LanguageManager manager;
 
   WorkActivity({this.cookie, this.manager});
@@ -37,6 +37,7 @@ class WorkActivity extends StatelessWidget {
 }
 
 class WorkPage extends StatefulWidget {
+
   WorkPage({Key key, this.title, this.cookie, this.manager}) : super(key: key);
 
   final String title;
@@ -51,27 +52,36 @@ class WorkPage extends StatefulWidget {
 }
 
 class _WorkPageState extends State<WorkPage> {
+
   /*Native platform to get SSID from java code*/
   static const platform = const MethodChannel('artin.timemission/ssid');
 
+  /*Holds scaffold current state*/
   final key = new GlobalKey<ScaffoldState>();
 
+  /*Controller for description (returns description text)*/
   final descriptionController = new TextEditingController();
 
+  /*Instance that manages language (en/cz)*/
   LanguageManager manager;
 
+  /*List of all available projects*/
   List<Project> projects = new List();
 
+  /*List of current project names based on user profile*/
   List<String> projectNames = ["test", "test"];
 
+  /*List of current work types based on user profile*/
   List<String> workTypes = ["test", "test"];
 
+  /*List of current */
   List<Project> works = new List();
 
+  /*Current work state (working/not working)*/
   bool state = false;
 
+  /*State whether the init state is completed or not*/
   bool init = false;
-
 
   String text = "";
 
@@ -86,18 +96,16 @@ class _WorkPageState extends State<WorkPage> {
   String workType;
 
   int userId;
-  var countdown = 0;
 
   _WorkPageState({this.cookie, this.manager});
 
   @override
   void initState() {
-    buttonState = manager.getWords(0);
-    text = manager.getWords(2);
     _initState();
     super.initState();
   }
 
+  /*Changes work type in expansion panel*/
   _onWorkTypeChange(String value) async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
     sharedPreferences.setString("workType", value);
@@ -125,11 +133,13 @@ class _WorkPageState extends State<WorkPage> {
         )));
   }
 
-
   void _onChange(String value) async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
+
+    //saved project name
     sharedPreferences.setString("projectName", value);
 
+    //project id
     int id;
 
     setState(() {
@@ -167,30 +177,32 @@ class _WorkPageState extends State<WorkPage> {
 
   /*INIT STATE*/
   _initState() async {
-    getSSID();
-
     projectNames.clear();
     workTypes.clear();
+
+    buttonState = manager.getWords(0);
+    text = manager.getWords(2);
+
+    getSSID();
 
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
 
     try {
-      var response = await http.get('https://tmtest.artin.cz/data/main/user',
+      var userData = await http.get('https://tmtest.artin.cz/data/main/user',
           headers: {"cookie": cookie});
 
-      userId = json.decode(response.body)['user']['id'];
+      userId = json.decode(userData.body)['user']['id'];
 
-      var response3 = await http.get(
+      var projectData = await http.get(
           'https://tmtest.artin.cz/data/projects/most-frequent-and-assigned-of-user',
           headers: {"cookie": cookie});
 
-      List availableProjects = json.decode(response3.body);
+      List availableProjects = json.decode(projectData.body);
 
-      for (int j = 0; j < availableProjects.length; j++) {
-        projects.add(new Project(
-            projectName: availableProjects[j]['name'],
-            projectId: availableProjects[j]['id']));
-        projectNames.add(availableProjects[j]['name']);
+      for (int i = 0; i < availableProjects.length; i++) {
+        projects.add(new Project(projectName: availableProjects[i]['name'],
+            projectId: availableProjects[i]['id']));
+        projectNames.add(availableProjects[i]['name']);
       }
 
       int id = projects[0].projectId;
@@ -236,10 +248,12 @@ class _WorkPageState extends State<WorkPage> {
     });
   }
 
+  /*On button pressed */
   _saveTime(bool pressedByWifi) async {
     String now = new DateTime.now().toString();
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
     String dateFrom;
+
     setState(() {
       if (!state) {
         buttonState = manager.getWords(1);
@@ -253,7 +267,6 @@ class _WorkPageState extends State<WorkPage> {
         sharedPreferences.setString("timeFrom", now);
         timeStarted = manager.getWords(3) + now.substring(10, 16);
       } else {
-        print(sharedPreferences.getString("timeFrom"));
         dateFrom = sharedPreferences.getString("timeFrom");
         sharedPreferences.setString("timeFrom", "");
       }
@@ -265,26 +278,7 @@ class _WorkPageState extends State<WorkPage> {
   }
 
   void setTime(dateFrom, bool pressedByWifi) async {
-    String fDateTo;
-    String fDateFrom;
-
-    print(dateFrom);
-
-    if (getMinutes(dateFrom) == 60) {
-      print(dateFrom.substring(11, 13));
-
-      fDateFrom = dateFrom.substring(0, 10) +
-          "T" +
-          (int.parse(dateFrom.substring(11, 13)) + 1).toString() +
-          ":00:00+03:00";
-    } else {
-      fDateFrom = dateFrom.substring(0, 10) +
-          "T" +
-          dateFrom.substring(11, 14) +
-          getMinutes(dateFrom).toString() +
-          ":00+02:00";
-    }
-
+    String fDateFrom = checkTime(dateFrom);
     var dateTo;
 
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
@@ -295,20 +289,7 @@ class _WorkPageState extends State<WorkPage> {
       dateTo = new DateTime.now().toIso8601String();
     }
 
-    if (getMinutes(dateTo) == 60) {
-      fDateTo = dateTo.substring(0, 10) +
-          "T" +
-          (int.parse(dateTo.substring(11, 13)) + 1).toString() +
-          ":00:00+03:00";
-    } else {
-      fDateTo = dateTo.substring(0, 10) +
-          "T" +
-          dateTo.substring(11, 14) +
-          getMinutes(dateTo).toString() +
-          ":00+02:00";
-    }
-
-    /*-------------------------------------------------------*/
+    String fDateTo = checkTime(dateTo);
     List<String> workData = new List<String>();
 
     workData.add(474191.toString());
@@ -321,41 +302,60 @@ class _WorkPageState extends State<WorkPage> {
     workData.add(fDateFrom);
     workData.add(fDateTo);
 
-    print(fDateFrom);
-    print(fDateTo);
     if (sharedPreferences.getInt("numberOfUnfinishedWorks") == null) {
       sharedPreferences.setInt("numberOfUnfinishedWorks", 0);
     }
 
-    /*if (int.parse(fDateTo.substring(11, 13)) -
+    if (int.parse(fDateTo.substring(11, 13)) -
                 int.parse(fDateFrom.substring(11, 13)) >
             0 ||
         int.parse(fDateFrom.substring(14, 16)) -
                 int.parse(fDateTo.substring(14, 16)) >
-            0) {*/
+            0) {
 
     sharedPreferences.setInt("numberOfUnfinishedWorks",
         sharedPreferences.getInt("numberOfUnfinishedWorks") + 1);
     String prefName = "unfinishedWork" +
         sharedPreferences.getInt("numberOfUnfinishedWorks").toString();
     sharedPreferences.setStringList(prefName, workData);
-    print(prefName);
-    /* } else {
-      showToastMessage("Work time must be longer than 10 min");
-    }*/
+    } else {
+      showToastMessage(manager.getWords(37));
+    }
 
     WifiState.instance.showNotification = true;
+
     setState(() {
       state = false;
       buttonState = manager.getWords(0);
       text = manager.getWords(2);
       sharedPreferences.setString("timeFrom", "");
       sharedPreferences.setString("timeTo", "");
+
       if (pressedByWifi) {
         WifiState.instance.STATE = "LISTEN";
       }
     });
-    /*-------------------------------------------------------*/
+  }
+
+  /*Solution if the minute is rounded up to 0 (add one hour up)*/
+  String checkTime(time) {
+    String finalTime;
+
+    if (getMinutes(time) == 60) {
+      String str = (int.parse(time.substring(11, 13)) + 1) < 10
+          ? "0" + (int.parse(time.substring(11, 13)) + 1).toString()
+          : (int.parse(time.substring(11, 13)) + 1).toString();
+      finalTime = time.substring(0, 10) + "T" + str + ":00:00+02:00";
+    } else {
+      String min = getMinutes(time) == 0 ? "00" : getMinutes(time).toString();
+
+      finalTime = time.substring(0, 10) +
+          "T" +
+          time.substring(11, 14) +
+          min +
+          ":00+02:00";
+    }
+    return finalTime;
   }
 
   void showToastMessage(String message) {
@@ -364,6 +364,7 @@ class _WorkPageState extends State<WorkPage> {
     ));
   }
 
+  /*Round minutes*/
   int getMinutes(String word) {
     int min = int.parse(word.substring(15, 16));
     int minutes = int.parse(word.substring(14, 16));
@@ -374,16 +375,6 @@ class _WorkPageState extends State<WorkPage> {
       minutes = minutes - min;
     }
     return minutes;
-  }
-
-  double getExactHour(String time, String time2) {
-    return double.parse(
-        (int.parse(time.substring(11, 13)) - int.parse(time2.substring(11, 13)))
-            .toString() +
-            "." +
-            (1 / (60 / (getMinutes(time) - getMinutes(time2))))
-                .toString()
-                .substring(2, 3));
   }
 
   /*Auto start work based on WiFi*/
@@ -405,8 +396,9 @@ class _WorkPageState extends State<WorkPage> {
 
         case "SAVE":
           if (SSID == "<unknown ssid>") {
-            this.state ? await _saveDataOnWifiEnd() : WifiState.instance.STATE =
-            "LISTEN";
+            this.state
+                ? await _saveDataOnWifiEnd()
+                : WifiState.instance.STATE = "LISTEN";
           }
           break;
       }
@@ -417,14 +409,14 @@ class _WorkPageState extends State<WorkPage> {
     return SSID;
   }
 
+  /*After the wifi is changed or the wifi is off this saves the work record*/
   _saveDataOnWifiEnd() async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
     sharedPreferences.setString("timeTo", new DateTime.now().toString());
-    print(sharedPreferences.getString("timeFrom"));
-    print(sharedPreferences.getString("timeTo"));
     setTime(sharedPreferences.getString("timeFrom"), true);
   }
 
+  /*If the wifi is artin wifi then this saves the time and changes state*/
   _startOnWifi() async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
     if (sharedPreferences.getString("timeFrom") == "") {
@@ -441,10 +433,6 @@ class _WorkPageState extends State<WorkPage> {
     WifiState.instance.STATE = "SAVE";
   }
 
-  Future sleep1() {
-    return new Future.delayed(const Duration(seconds: 1), () => "1");
-  }
-
   int getProjectId(String name) {
     for (int i = 0; i < projects.length; i++) {
       if (name == projects[i].projectName) {
@@ -455,7 +443,6 @@ class _WorkPageState extends State<WorkPage> {
 
   int getWorkId(String name) {
     for (int i = 0; i < works.length; i++) {
-      print(works[i].projectName);
       if (name == works[i].projectName) {
         return works[i].projectId;
       }
@@ -472,174 +459,169 @@ class _WorkPageState extends State<WorkPage> {
 
   @override
   Widget build(BuildContext context) {
-    return new WillPopScope(
-      child: new Scaffold(
-          key: key,
-          appBar: new AppBar(
-            title: new Text(widget.title),
-            actions: <Widget>[
-              new IconButton(
-                icon: new Icon(Icons.settings),
-                tooltip: manager.getWords(6),
-                onPressed: openSettings,
-              ),
-              new IconButton(
-                icon: getMenuIcon(),
-                tooltip: manager.getWords(7),
-                onPressed: openMenu,
-              ),
-              new IconButton(
-                icon: new Icon(Icons.exit_to_app),
-                tooltip: manager.getWords(8),
-                onPressed: () => exit(0),
-              )
-            ],
+    return new Scaffold(
+      key: key,
+      appBar: new AppBar(
+        title: new Text(widget.title),
+        actions: <Widget>[
+          new IconButton(
+            icon: new Icon(Icons.settings),
+            tooltip: manager.getWords(6),
+            onPressed: openSettings,
           ),
-          body: new Container(
-            child: new Center(
-              child: new Opacity(
-                opacity: init ? 1.0 : 0.0,
-                child: new FractionallySizedBox(
-                  widthFactor: 0.7,
-                  child: new Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                      new Opacity(
-                        opacity: state ? 1.0 : 0.0,
+          new IconButton(
+            icon: getMenuIcon(),
+            tooltip: manager.getWords(7),
+            onPressed: openMenu,
+          ),
+          new IconButton(
+            icon: new Icon(Icons.exit_to_app),
+            tooltip: manager.getWords(8),
+            onPressed: () => exit(0),
+          )
+        ],
+      ),
+      body: new Center(
+        child: new Opacity(
+          opacity: init ? 1.0 : 0.0,
+          child: new FractionallySizedBox(
+            widthFactor: 0.7,
+            child: new Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                new Opacity(
+                  opacity: state ? 1.0 : 0.0,
+                  child: new Text(
+                    timeStarted,
+                    textScaleFactor: 1.1,
+                    style: new TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                new Divider(height: 15.0, color: Colors.white),
+                new Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    new RaisedButton(
+                      child: new Padding(
                         child: new Text(
-                          timeStarted,
-                          textScaleFactor: 1.1,
+                          /*state == null ? "ahoj" : (state == true ? "1":"2")*/
+                          "$buttonState",
                           style: new TextStyle(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      new Divider(height: 15.0, color: Colors.white),
-                      new Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: <Widget>[
-                          new RaisedButton(
-                            child: new Padding(
-                              child: new Text(
-                                /*state == null ? "ahoj" : (state == true ? "1":"2")*/
-                                "$buttonState",
-                                style: new TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold),
-                                textScaleFactor: 1.2,
-                              ),
-                              padding: new EdgeInsets.all(15.0),
-                            ),
-                            color: Colors.orange[800],
-                            splashColor: Colors.orangeAccent,
-                            textColor: Colors.white,
-                            elevation: 4.0,
-                            onPressed: () {
-                              _saveTime(false);
-                            },
-                          ),
-                        ],
-                      ),
-                      new Divider(
-                        height: 20.0,
-                        color: Colors.white,
-                      ),
-                      new Opacity(
-                        opacity: state ? 0.0 : 1.0,
-                        child: new Text(
-                          text,
-                          style: new TextStyle(
-                              color: Colors.black.withOpacity(0.3)),
-                        ),
-                      ),
-                      new Opacity(
-                        opacity: state ? 1.0 : 0.0,
-                        child: new IgnorePointer(
-                          ignoring: !state,
-                          child: new Column(
-                          children: <Widget>[
-                            new Row(
-                              children: <Widget>[
-                                new Text(
-                                  manager.getWords(4),
-                                  style: new TextStyle(
-                                      color: Colors.blue,
-                                      fontWeight: FontWeight.bold),
-                                  textAlign: TextAlign.left,
-                                  textScaleFactor: 1.1,
-                                ),
-                              ],
-                            ),
-                            new Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: <Widget>[
-                                new DropdownButton(
-                                    onChanged: (String value) {
-                                      _onChange(value);
-                                    },
-                                    value: projectName,
-                                    items: projectNames
-                                        .toList()
-                                        .map((String value) {
-                                      return new DropdownMenuItem(
-                                        value: value,
-                                        child: new Container(
-                                          child: new Text(value),
-                                          width: 200.0,
-                                        ),
-                                        //200.0 to 100.0
-                                      );
-                                    }).toList())
-                              ],
-                            ),
-                            new Divider(
-                              height: 20.0,
                               color: Colors.white,
-                            ),
-                            new Row(
-                              children: <Widget>[
-                                new Text(
-                                  manager.getWords(5),
-                                  style: new TextStyle(
-                                      color: Colors.blue,
-                                      fontWeight: FontWeight.bold),
-                                  textAlign: TextAlign.left,
-                                  textScaleFactor: 1.1,
-                                ),
-                              ],
-                            ),
-                            new Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: <Widget>[
-                                new DropdownButton(
-                                    onChanged: (String value) {
-                                      _onWorkTypeChange(value);
-                                    },
-                                    value: workType,
-                                    items:
-                                    workTypes.toList().map((String value) {
-                                      return new DropdownMenuItem(
-                                        value: value,
-                                        child: new Container(
-                                          child: new Text(value),
-                                          width: 200.0,
-                                        ),
-                                        //200.0 to 100.0
-                                      );
-                                    }).toList())
-                              ],
+                              fontWeight: FontWeight.bold),
+                          textScaleFactor: 1.2,
+                        ),
+                        padding: new EdgeInsets.all(15.0),
+                      ),
+                      color: Colors.orange[800],
+                      splashColor: Colors.orangeAccent,
+                      textColor: Colors.white,
+                      elevation: 4.0,
+                      onPressed: () {
+                        _saveTime(false);
+                      },
+                    ),
+                  ],
+                ),
+                new Divider(
+                  height: 20.0,
+                  color: Colors.white,
+                ),
+                new Opacity(
+                  opacity: state ? 0.0 : 1.0,
+                  child: new Text(
+                    text,
+                    style:
+                    new TextStyle(color: Colors.black.withOpacity(0.3)),
+                  ),
+                ),
+                new Opacity(
+                  opacity: state ? 1.0 : 0.0,
+                  child: new IgnorePointer(
+                    ignoring: !state,
+                    child: new Column(
+                      children: <Widget>[
+                        new Row(
+                          children: <Widget>[
+                            new Text(
+                              manager.getWords(4),
+                              style: new TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.left,
+                              textScaleFactor: 1.1,
                             ),
                           ],
                         ),
+                        new Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: <Widget>[
+                            new DropdownButton(
+                                onChanged: (String value) {
+                                  _onChange(value);
+                                },
+                                value: projectName,
+                                items:
+                                projectNames.toList().map((String value) {
+                                  return new DropdownMenuItem(
+                                    value: value,
+                                    child: new Container(
+                                      child: new Text(value),
+                                      width: 200.0,
+                                    ),
+                                    //200.0 to 100.0
+                                  );
+                                }).toList())
+                          ],
                         ),
-                      ),
-                    ],
+                        new Divider(
+                          height: 20.0,
+                          color: Colors.white,
+                        ),
+                        new Row(
+                          children: <Widget>[
+                            new Text(
+                              manager.getWords(5),
+                              style: new TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.left,
+                              textScaleFactor: 1.1,
+                            ),
+                          ],
+                        ),
+                        new Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: <Widget>[
+                            new DropdownButton(
+                                onChanged: (String value) {
+                                  _onWorkTypeChange(value);
+                                },
+                                value: workType,
+                                items: workTypes.toList().map((String value) {
+                                  return new DropdownMenuItem(
+                                    value: value,
+                                    child: new Container(
+                                      child: new Text(value),
+                                      width: 200.0,
+                                    ),
+                                    //200.0 to 100.0
+                                  );
+                                }).toList())
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          )),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_app/Language.dart';
 import 'package:flutter_app/WifiState.dart';
 import 'package:flutter_app/main.dart';
+import 'package:flutter_string_encryption/flutter_string_encryption.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -24,11 +25,7 @@ class SettingsHome extends StatefulWidget {
 }
 
 class SettingsHomeState extends State<SettingsHome> {
-  static const platform = const MethodChannel('artin.timemission/ssid');
-
   int groupValue;
-
-  bool _state = true;
 
   LanguageManager manager;
 
@@ -37,6 +34,7 @@ class SettingsHomeState extends State<SettingsHome> {
   SettingsHomeState({this.manager});
 
   List<ExpansionItem> listItems;
+
   List<ExpansionItem> listItems2;
 
   @override
@@ -55,6 +53,7 @@ class SettingsHomeState extends State<SettingsHome> {
     loadValue();
   }
 
+  /*Changes value of languages*/
   loadValue() async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
     sharedPreferences.get("language") == "czech"
@@ -62,22 +61,13 @@ class SettingsHomeState extends State<SettingsHome> {
         : changeValue(0, true);
   }
 
+
   void changeValue(int value, bool isFromInit) {
     setState(() {
       groupValue = value == 0 ? 0 : 1;
       if (!isFromInit) {
         saveValue(value);
       }
-    });
-  }
-
-  void changeState() {
-    _state == _state ? false : true;
-  }
-
-  void changeWifiState(bool value) {
-    setState(() {
-      _state = value;
     });
   }
 
@@ -251,36 +241,14 @@ class SettingsHomeState extends State<SettingsHome> {
               );
             }).toList(),
           ),
-
-          /*new GestureDetector(
-            child: new Card(
-              child: new Padding(
-                padding: EdgeInsets.all(10.0),
-                child: new Row(
-                  children: <Widget>[
-                    new Checkbox(
-                        value: _state,
-                        onChanged: (bool value){
-                          changeWifiState(value);
-                        },
-                    ),
-                    new Text(
-                      "Enable auto change state base on WiFI"
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            onTap: changeState,
-          )*/
         ],
       ),
     );
   }
 
+  /*Action after user pressed login button*/
   newLogin() async {
-    //try{
-    var response = await http.post("https://tmtest.artin.cz/login", body: {
+    var post = await http.post("https://tmtest.artin.cz/login", body: {
       "username": controllers
           .getLoginController()
           .text,
@@ -292,7 +260,7 @@ class SettingsHomeState extends State<SettingsHome> {
       "content-type": "application/x-www-form-urlencoded"
     });
 
-    var cookie = response.headers['set-cookie'];
+    var cookie = post.headers['set-cookie'];
 
     var auth = await http.get('https://tmtest.artin.cz/data/main/user',
         headers: {"cookie": cookie});
@@ -300,15 +268,10 @@ class SettingsHomeState extends State<SettingsHome> {
     if (auth.statusCode != 401) {
       checkForUnfinishedProjects(cookie);
     } else {
-      myDialog("Something went wrong");
+      myDialog(manager.getWords(16));
     }
-
-    print(response.statusCode);
-    print(response.body);
-
-    /*}catch(exception){
-      print(exception);
-    }*/
+    print(post.statusCode);
+    print(post.body);
   }
 
   Future myDialog(text) {
@@ -326,7 +289,6 @@ class SettingsHomeState extends State<SettingsHome> {
   checkForUnfinishedProjects(cookie) async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
 
-
     if (sharedPreferences.getInt("numberOfUnfinishedWorks") > 0) {
       unfinishedTaskDialog(cookie);
     } else {
@@ -334,26 +296,30 @@ class SettingsHomeState extends State<SettingsHome> {
     }
   }
 
+  /*Saves new user*/
   saveCredentials(cookie) async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
 
+    final crypto = new PlatformStringCryptor();
+
+    //AES key arg1 - password to key, arg2 - salt
+    final String key = await crypto.generateKeyFromPassword(
+        "artin_the_best", "salt");
+
     sharedPreferences.setString("timeFrom", "");
 
-    /*for (int i = 0; i < sharedPreferences.getInt("numberOfUnfinishedWorks"); i++) {
-      String prefName = "unfinishedWork" + i.toString();
-      sharedPreferences.setStringList(prefName, null);
-    }*/
-
     WifiState.instance.showNotification = false;
+
     sharedPreferences.setString("cookie", cookie);
-    sharedPreferences.setString(
-        'username', controllers
+
+    sharedPreferences.setString('username', controllers
         .getLoginController()
         .text);
-    sharedPreferences.setString(
-        'password', controllers
+
+    String pass = await crypto.encrypt(controllers
         .getPasswordController()
-        .text);
+        .text, key);
+    sharedPreferences.setString('password', pass);
 
     Navigator.pushReplacement(
         context, new MaterialPageRoute(builder: (context) =>
@@ -383,26 +349,26 @@ class SettingsHomeState extends State<SettingsHome> {
     );
   }
 
+  /*If there is more than 0 project waiting for upload
+  * then this display dialog if user wants to continue anyway*/
   Future<Null> unfinishedTaskDialog(cookie) async {
     return showDialog<Null>(
       context: context,
       barrierDismissible: true,
       builder: (BuildContext context) {
         return new AlertDialog(
-          title: new Text("Waiting for upload"),
+          title: new Text(manager.getWords(33)),
           content: new SingleChildScrollView(
             child: new ListBody(
               children: <Widget>[
-                new Text(
-                    "You have project waiting to upload. Would you like to continue anyway?"),
+                new Text(manager.getWords(34)),
               ],
             ),
           ),
-
           actions: <Widget>[
             new FlatButton(
               child: new Text(
-                "Cancel",
+                manager.getWords(13),
                 textScaleFactor: 1.1,
                 style: new TextStyle(fontWeight: FontWeight.bold),
               ),
@@ -412,7 +378,7 @@ class SettingsHomeState extends State<SettingsHome> {
             ),
             new FlatButton(
               child: new Text(
-                "Continue",
+                manager.getWords(15),
                 textScaleFactor: 1.1,
                 style: new TextStyle(fontWeight: FontWeight.bold),
               ),

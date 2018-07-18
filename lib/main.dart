@@ -4,8 +4,8 @@ import 'package:connectivity/connectivity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_app/Language.dart';
 import 'package:flutter_app/WifiState.dart';
-import 'package:flutter_app/WorkRecords.dart';
 import 'package:flutter_app/WorkState.dart';
+import 'package:flutter_string_encryption/flutter_string_encryption.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,7 +13,6 @@ void main() => runApp(new MyApp());
 
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
-
   @override
   Widget build(BuildContext context) {
     return new MaterialApp(
@@ -43,14 +42,12 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
 
-  /*KEY - HOLDS SCAFFOLD STATE*/
+  ///KEY - HOLDS SCAFFOLD STATE
   final key = new GlobalKey<ScaffoldState>();
 
   final loginController = new TextEditingController();
 
   final passwordController = new TextEditingController();
-
-  LoginActivity login;
 
   String loginUser, loginPass;
 
@@ -58,55 +55,72 @@ class _MyHomePageState extends State<MyHomePage> {
 
   bool changeUser;
 
-  LanguageManager manager;
+  LanguageManager manager = new LanguageManager();
 
   _MyHomePageState({@required this.changeUser});
 
   @override
   void initState() {
-    getPreferences();
+    manager.setLanguage();
+    checkForLoggedUser();
     super.initState();
   }
 
   /*CHECKS IF USER IS ALREADY LOGGED IN*/
-  getPreferences() async {
+  checkForLoggedUser() async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
 
+    final crypto = new PlatformStringCryptor();
+
+    //AES key arg1 - password to key, arg2 - salt
+    final String key = await crypto.generateKeyFromPassword(
+        "artin_the_best", "salt");
+
+    /*If there is more than 0 unfinished works shows notification*/
     if (sharedPreferences.getInt("numberOfUnfinishedWorks") != null) {
       if (sharedPreferences.getInt("numberOfUnfinishedWorks") > 0) {
         WifiState.instance.showNotification = true;
       }
     }
 
-    manager = new LanguageManager(sharedPreferences: sharedPreferences);
-    manager.setLanguage();
+    if (sharedPreferences.getString('username') != "" &&
+        sharedPreferences.getString('username') != null) {
+      loginUser = sharedPreferences.getString('username');
 
-    if (sharedPreferences.getString('username') != "") {
-      setState(() {
-        loginUser = sharedPreferences.getString('username');
-        loginPass = sharedPreferences.getString('password');
-        loginController.text = loginUser;
-        passwordController.text = loginPass;
-        _remember = true;
-      });
+      try {
+        //decrypt password
+        loginPass =
+        await crypto.decrypt(sharedPreferences.getString('password'), key);
+      } on MacMismatchException {
+
+      }
+      loginController.text = loginUser;
+      passwordController.text = loginPass;
+      _remember = true;
     }
 
-    if (loginUser != "" &&
-        loginUser != null &&
-        loginPass != "" &&
+    if (loginUser != "" && loginUser != null && loginPass != "" &&
         loginPass != null) {
       fetchPost(loginUser, loginPass);
     }
   }
 
-  /*POST METHOD - CHECK FOR LOGIN*/
+  /*POST METHOD - LOGIN*/
   fetchPost(String username, String password) async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
+
+    final crypto = new PlatformStringCryptor();
+
+    //AES key arg1 - password to key, arg2 - salt
+    final String key = await crypto.generateKeyFromPassword(
+        "artin_the_best", "salt");
+
 
     if (!changeUser) {
       showLoadingDialog();
     }
     var sharedCookie = sharedPreferences.getString("cookie");
+
     var connectivityResult = await (new Connectivity().checkConnectivity());
 
     /*CHECKS FOR INTERNET CONNECTION*/
@@ -129,10 +143,7 @@ class _MyHomePageState extends State<MyHomePage> {
         }, headers: {
           "content-type": "application/x-www-form-urlencoded"
         });
-
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
+        pop();
 
         /*CHECK IF USERNAME AND PASSWORD ARE CORRECT*/
         if (response.statusCode != 500) {
@@ -145,15 +156,22 @@ class _MyHomePageState extends State<MyHomePage> {
 
           if (responseTest2.statusCode != 401) {
             if (_remember) {
+              //Store cookie
               sharedPreferences.setString("cookie", cookie);
+
+              //Store username
               sharedPreferences.setString('username', username);
-              sharedPreferences.setString('password', password);
+
+              //encrypt password via AES
+              final String pass = await crypto.encrypt(password, key);
+
+              //store password
+              sharedPreferences.setString('password', pass);
             }
+
             startWorkActivity(cookie);
           } else {
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
+            pop();
             myDialog(manager.getWords(16));
           }
         } else {
@@ -161,29 +179,31 @@ class _MyHomePageState extends State<MyHomePage> {
           myDialog(manager.getWords(17));
         }
       } else {
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
+        pop();
         startWorkActivity(sharedPreferences.getString("cookie"));
       }
     } else {
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
+      pop();
       showToastMessage("No Internet connection");
     }
   }
 
   /*If login was successful, this starts the work activity*/
   void startWorkActivity(cookie) {
-    if (Navigator.canPop(context)) {
-      Navigator.pop(context);
-    }
+    pop();
     Navigator.pushReplacement(
         context,
         new MaterialPageRoute(
             builder: (context) =>
             new WorkActivity(cookie: cookie, manager: manager)));
+  }
+
+  /* Return back to the previous widget
+  * if there is a new one that can be destroyed*/
+  void pop() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
   }
 
   /*Dialog with custom text*/
@@ -250,95 +270,71 @@ class _MyHomePageState extends State<MyHomePage> {
         title: new Text(widget.title),
       ),
       //UI for login
-      body: new Container(
-          child: new Center(
-            child: new Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                new FractionallySizedBox(
-                  widthFactor: 0.7, // 265 / 375
-                  child: new Container(
-                    child: new Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        new Theme(
-                          data: new ThemeData(
-                            primaryColor: Colors.orange[700],
-                            hintColor: Colors.black,
-                            //textSelectionColor: Colors.orange[700],
-                          ),
-                          child: new TextField(
-                            decoration: new InputDecoration(
-                              labelText: "Username", //.getWords(19)
-                            ),
-                            controller: loginController,
-                          ),
-                        ),
-                        new Theme(
-                          data: new ThemeData(
-                            primaryColor: Colors.orange[700],
-                            hintColor: Colors.black,
-                            //textSelectionColor: Colors.orange[700],
-                          ),
-                          child: new TextField(
-                            obscureText: true,
-                            decoration: new InputDecoration(
-                              labelText: "password",
-                            ),
-                            controller: passwordController,
-                          ),
-                        ),
-                        new Divider(
-                          height: 5.0,
-                          color: Colors.white,
-                        ),
-                        new Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            new Row(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: <Widget>[
-                                new Checkbox(
-                                    value: _remember,
-                                    onChanged: (bool value) {
-                                  _rememberChange(value);
-                                }),
-                                new Text(/*manager.getWords(21)*/
-                                    "Remember me"),
-                              ],
-                            ),
-                          ],
-                        ),
-                        new Divider(
-                          height: 15.0,
-                          color: Colors.white,
-                        ),
-                      ],
-                    ),
-                  ),
+      body: new Center(
+        child: new FractionallySizedBox(
+          widthFactor: 0.7,
+          child: new Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              new Theme(
+                data: new ThemeData(
+                  primaryColor: Colors.orange[700],
+                  hintColor: Colors.black,
+                  //textSelectionColor: Colors.orange[700],
                 ),
-                new FractionallySizedBox(
-                  widthFactor: 0.7,
-                  child: new Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      new RaisedButton(
-                        child: Text(/*manager.getWords(22)*/ "Login"),
-                        color: Colors.orange[700],
-                        splashColor: Colors.orangeAccent,
-                        textColor: Colors.white,
-                        elevation: 0.0,
-                        onPressed: () {
-                          fetchPost(
-                              loginController.text, passwordController.text);
-                        },
-                      )
-                    ],
+                child: new TextField(
+                  decoration: new InputDecoration(
+                    labelText: "Username", //.getWords(19)
                   ),
-                )
-              ],
-            ),
-          )),
+                  controller: loginController,
+                ),
+              ),
+              new Theme(
+                data: new ThemeData(
+                  primaryColor: Colors.orange[700],
+                  hintColor: Colors.black,
+                  //textSelectionColor: Colors.orange[700],
+                ),
+                child: new TextField(
+                  obscureText: true,
+                  decoration: new InputDecoration(
+                    labelText: "password",
+                  ),
+                  controller: passwordController,
+                ),
+              ),
+              new Divider(
+                height: 5.0,
+                color: Colors.white,
+              ),
+              new Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: <Widget>[
+                  new Checkbox(
+                      value: _remember,
+                      onChanged: (bool value) {
+                        _rememberChange(value);
+                      }),
+                  new Text(/*manager.getWords(21)*/
+                      "Remember me"),
+                ],
+              ),
+              new Container(
+                width: double.INFINITY,
+                child: new RaisedButton(
+                  child: Text(/*manager.getWords(22)*/ "Login"),
+                  color: Colors.orange[700],
+                  splashColor: Colors.orangeAccent,
+                  textColor: Colors.white,
+                  onPressed: () {
+                    fetchPost(loginController.text, passwordController.text);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
